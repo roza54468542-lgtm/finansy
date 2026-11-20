@@ -19,5 +19,5 @@ window.APP_CONFIG = {
     appId: ""
   },
 
-  owner: { name: "", email: "" }
+  owner: { name: "Наташа", email: "" }
 };

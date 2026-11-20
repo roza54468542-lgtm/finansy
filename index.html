@@ -489,6 +489,7 @@ input{font:inherit;color:inherit}
     <button type="button" data-ft="income" aria-pressed="false">Поступление</button>
   </div>
   <div class="amtd zero" id="fAmt">0<span class="cur">₴</span></div>
+  <div class="whos" id="fWho"></div>
   <div class="collapse" id="fCatWrap"><div>
     <div class="lbl2" id="fCatL">Категория</div>
     <div class="chips" id="fCats"></div>
@@ -557,6 +558,7 @@ input{font:inherit;color:inherit}
       <div class="stack" style="gap:8px"><div class="fl">Уже оплачено</div><label class="field"><input id="pPaid" type="text" inputmode="numeric" placeholder="0" autocomplete="off"></label></div>
     </div>
   </div></div>
+  <div id="pWhoWrap"><div class="lbl2">Чей платёж</div><div class="whos" id="pWho"></div></div>
   <div class="summary" id="pSum"></div>
   <button class="btn" id="pSave" type="button">Сохранить</button>
   <button class="btn soft" id="pUndo" type="button" hidden>Отменить последнюю оплату</button>
@@ -577,6 +579,18 @@ input{font:inherit;color:inherit}
   </div></div>
 
   <button class="btn" id="ySave" type="button">Отметить оплату</button>
+</section>
+
+<!-- Участник -->
+<section class="sheet" id="sPer" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="grab"></div>
+  <div class="sh-h"><h3 id="mTitle">Новый участник</h3><button class="x" data-close aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <label class="field"><input id="mName" type="text" maxlength="20" placeholder="Имя, например Влад или «Общие»" autocomplete="off"></label>
+  <div class="lbl2">Цвет</div>
+  <div class="swatches" id="mColors"></div>
+  <button class="togrow" id="mDef" type="button"><span>Ставить по умолчанию<span class="cnt" style="display:block;font-weight:500;margin-top:2px">Новые траты на этом телефоне сразу будут от этого участника</span></span><span class="switch" id="mDefSw" role="switch" aria-checked="false"></span></button>
+  <button class="btn" id="mSave" type="button">Сохранить</button>
+  <button class="btn danger" id="mDel" type="button" hidden>Удалить участника</button>
 </section>
 
 <!-- Депозит -->
@@ -656,8 +670,8 @@ input{font:inherit;color:inherit}
 var CFG = window.APP_CONFIG || {};
 var OW = CFG.owner || {};
 var MY_NAME = String(OW.name || '').trim();
-var PEOPLE = { a: { name: MY_NAME || 'Я', email: String(OW.email || '').trim().toLowerCase() } };
-var WHO = ['a'];
+var P_COLORS = ['#2F67F0','#E04C79','#14946B','#F59E0B','#8B5CF6','#0EA5E9','#EF4444','#F97316','#D946EF','#64748B'];
+var DEFAULT_PEOPLE = [['a', MY_NAME || 'Я', '#2F67F0'], ['s', 'Общие', '#14946B']];
 var DEMO = !(CFG.firebase && CFG.firebase.apiKey);
 var FB_VER = '10.12.2';
 var LOAN_CAT = 'Кредиты и рассрочки';
@@ -697,6 +711,7 @@ var THEMES = [
 ];
 var WIDGETS = [
   ['balance','Баланс','Баланс, траты и поступления за месяц'],
+  ['people','Кто сколько','Траты каждого участника за месяц'],
   ['budget','Лимит на месяц','Сколько ещё можно тратить в день'],
   ['limits','Лимиты по категориям','Сколько осталось в каждой категории'],
   ['plan','План на месяц','Поступления, платежи и что останется'],
@@ -772,6 +787,7 @@ var PR = { theme:'system', widgets: WIDGETS.map(function(w){ return {id:w[0], on
     var p = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null');
     if (p){
       if (p.theme) PR.theme = p.theme;
+      if (p.me) PR.me = p.me;
       if (Array.isArray(p.widgets)){
         var known = {}; WIDGETS.forEach(function(w){ known[w[0]] = 1; });
         var list = p.widgets.filter(function(w){ return w && known[w.id]; });
@@ -799,10 +815,17 @@ applyTheme();
 if (window.matchMedia) try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme); } catch(e){}
 
 /* ================= состояние ================= */
-var S = { tx:[], cats:[], icats:[], plans:[], deps:[], usd:[], settings:{startBalance:0}, me:'a', email:'', view:'home', month:curMonth(),
+var S = { tx:[], cats:[], icats:[], plans:[], deps:[], usd:[], people:[], settings:{startBalance:0}, me:'a', email:'', view:'home', month:curMonth(),
   statsMode:'overview', statsWho:'all', histWho:'all', histType:'all', ready:{tx:false,cats:false} };
 var store = null;
 
+/* ---------- участники ---------- */
+function members(){ return S.people.length ? S.people : [{id:'a', name:MY_NAME || 'Я', color:P_COLORS[0]}]; }
+function per(id){ var l = members(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
+function pName(id){ var p = per(id); return p ? p.name : 'Без участника'; }
+function pColor(id){ var p = per(id); return p ? okColor(p.color) : '#8A93A6'; }
+function multi(){ return members().length > 1; }
+function defWho(){ return per(PR.me) ? PR.me : members()[0].id; }
 function catOf(id){ for (var i = 0; i < S.cats.length; i++) if (S.cats[i].id === id) return S.cats[i]; for (var j = 0; j < (S.icats || []).length; j++) if (S.icats[j].id === id) return S.icats[j]; return null; }
 function icatOf(id){ var c = catOf(id); return c && c.kind === 'inc' ? c : null; }
 function byId(list, id){ for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
@@ -870,7 +893,7 @@ function makeDemo(){
   var seed = 11; function r(){ seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
   function pick(a){ return a[Math.floor(r() * a.length)]; }
   var tx = [], n = 0, now = new Date(), cm = curMonth(), td = now.getDate();
-  function add(date, type, amount, cat, note){ n++; tx.push({id:'d'+n, type:type, amount:Math.round(amount)*100, who:'a', cat:cat, date:date, note:note, by:'demo', ts:n}); }
+  function add(date, type, amount, cat, note, who){ n++; tx.push({id:'d'+n, type:type, amount:Math.round(amount)*100, who:who || (type === 'income' ? 'a' : pick(['a','a','v','s','s'])), cat:cat, date:date, note:note, by:'demo', ts:n}); }
   for (var back = 1; back >= 0; back--){
     var first = new Date(now.getFullYear(), now.getMonth() - back, 1);
     var dim = new Date(first.getFullYear(), first.getMonth()+1, 0).getDate();
@@ -878,6 +901,7 @@ function makeDemo(){
     for (var d = 1; d <= last; d++){
       var ds = dstr(new Date(first.getFullYear(), first.getMonth(), d));
       if (d === 5) add(ds,'income',24000,'i01','Зарплата');
+      if (d === 9) add(ds,'income',15000,'i01','Зарплата','v');
       if (d === 12) add(ds,'income',5200,'i02','Пенсия');
       if (d === 3) add(ds,'expense',2950 + r()*400,'c04','Коммуналка');
       if (d === 7){ add(ds,'expense',250,'c05','Мобильный'); add(ds,'expense',300,'c05','Интернет'); }
@@ -910,10 +934,11 @@ function makeDemo(){
   ];
   return { tx:tx, categories:DEFAULT_CATS.map(function(c,i){ var o = {id:c[0], name:c[1], color:c[2], order:i}; if (c[0] === 'c01') o.limit = 1200000; if (c[0] === 'c02') o.limit = 150000; if (c[0] === 'c06') o.limit = 300000; return o; })
       .concat(DEFAULT_INC.map(function(c,i){ return {id:c[0], name:c[1], color:c[2], order:i, kind:'inc'}; })),
-    plans:plans, deps:deps, usd:usdL, settings:{startBalance:1500000, budget:2500000, seeded:true} };
+    plans:plans, deps:deps, usd:usdL, settings:{startBalance:1500000, budget:2500000, seeded:true},
+    people:[{id:'a', name:MY_NAME || 'Наташа', color:'#2F67F0', order:0}, {id:'v', name:'Влад', color:'#E04C79', order:1}, {id:'s', name:'Общие', color:'#14946B', order:2}] };
 }
 
-var COLS = ['tx','categories','plans','deps','usd'];
+var COLS = ['tx','categories','plans','deps','usd','people'];
 function DemoStore(){
   var KEY = 'moi-finansy-demo-v1', data = null;
   try { data = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch(e){}
@@ -947,6 +972,7 @@ function FirebaseStore(db){
     var b = db.batch();
     DEFAULT_CATS.forEach(function(c, i){ b.set(db.collection('categories').doc(c[0]), {name:c[1], color:c[2], order:i}); });
     DEFAULT_INC.forEach(function(c, i){ b.set(db.collection('categories').doc(c[0]), {name:c[1], color:c[2], order:i, kind:'inc'}); });
+    DEFAULT_PEOPLE.forEach(function(p, i){ b.set(db.collection('people').doc(p[0]), {name:p[1], color:p[2], order:i}); });
     b.set(setD, {seeded:true, incSeeded:true}, {merge:true});
     return b.commit();
   }
@@ -1031,7 +1057,22 @@ var ICON_DN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke
 var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
 var CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>';
 
-function whoPill(){ return ''; }
+function whoPill(w){
+  if (!multi()) return '';
+  var c = pColor(w);
+  return '<span class="who" style="color:' + c + ';background:color-mix(in srgb,' + c + ' 14%,transparent)">' + esc(pName(w)) + '</span>';
+}
+function whoChips(el, attr){
+  el.innerHTML = members().map(function(p){ var c = okColor(p.color); return '<button type="button" class="chip" ' + attr + '="' + esc(p.id) + '" style="--c:' + c + '"><span class="dot" style="background:' + c + '"></span>' + esc(p.name) + '</button>'; }).join('');
+  el.hidden = !multi();
+}
+function whoFilter(key, attr, cur){
+  if (!multi()) return '';
+  var opts = [['all','Все']].concat(members().map(function(p){ return [p.id, p.name]; }));
+  if (opts.length <= 4) return seg(key, attr, opts, cur);
+  return '<div class="chips" style="max-height:none">' + opts.map(function(o){ var c = o[0] === 'all' ? 'var(--ink)' : pColor(o[0]);
+    return '<button type="button" class="chip" ' + attr + '="' + esc(o[0]) + '" aria-pressed="' + (o[0] === cur) + '" style="--c:' + c + '">' + (o[0] === 'all' ? '' : '<span class="dot" style="background:' + c + '"></span>') + esc(o[1]) + '</button>'; }).join('') + '</div>';
+}
 function letterOf(s){ return esc(String(s || '?').trim().charAt(0).toUpperCase() || '?'); }
 function txRow(t){
   if (t.type === 'move'){
@@ -1122,6 +1163,17 @@ W.balance = function(){
   var exp = mt.filter(function(t){ return t.type === 'expense'; }), spent = sum(exp), got = sum(mt.filter(function(t){ return t.type === 'income'; }));
   return '<section class="hero"><div><div class="lbl">Баланс</div><div class="big" data-num="h-bal" data-v="' + balance() + '"></div></div>' +
     '<div class="row"><div><small>Траты за ' + esc(monthName(m)) + '</small><b data-num="h-spent" data-v="' + spent + '"></b></div><div><small>Поступления</small><b data-num="h-got" data-pre="+" data-v="' + got + '"></b></div></div></section>';
+};
+W.people = function(){
+  if (!multi()) return '';
+  var l = members(), sp = {};
+  txOfMonth(curMonth()).forEach(function(t){ if (t.type === 'expense') sp[t.who] = (sp[t.who] || 0) + t.amount; });
+  var mx = 1; l.forEach(function(p){ if ((sp[p.id] || 0) > mx) mx = sp[p.id]; });
+  return '<div class="people" style="grid-template-columns:repeat(' + Math.min(l.length, 3) + ',minmax(0,1fr))">' + l.map(function(p){
+    var c = okColor(p.color), v = sp[p.id] || 0;
+    return '<button class="pt" data-go="stats" data-who="' + esc(p.id) + '"><span class="nm"><span class="dot" style="background:' + c + '"></span>' + esc(p.name) + '</span>' +
+      '<span class="v" data-num="h-p-' + esc(p.id) + '" data-round data-v="' + v + '"></span><span class="track"><span class="fill" data-ak="h-pb-' + esc(p.id) + '" data-kind="w" data-a="' + (v / mx * 100).toFixed(2) + '" style="background:' + c + '"></span></span></button>';
+  }).join('') + '</div>';
 };
 W.payments = function(){
   var act = activePlans();
@@ -1227,14 +1279,14 @@ function vStats(){
 }
 /* ===== Заработок: сколько и за что пришло (по категориям пополнений) ===== */
 function vIncome(){
-  var m = S.month, w = S.statsWho;
+  var m = S.month, w = per(S.statsWho) ? S.statsWho : 'all';
   function f(t){ return t.type === 'income' && (w === 'all' || t.who === w); }
   var list = txOfMonth(m).filter(f), total = sum(list), prev = sum(txOfMonth(shiftMonth(m, -1)).filter(f));
   function ck(t){ return icatOf(t.cat) ? t.cat : '_none'; }
   function cInfo(id){ var c = icatOf(id); return c ? {name:c.name, color:okColor(c.color)} : {name:'Без категории', color:'var(--inc)'}; }
   var by = {}; list.forEach(function(t){ var k = ck(t); if (!by[k]) by[k] = {id:k, sum:0, n:0}; by[k].sum += t.amount; by[k].n++; });
   var cats = Object.keys(by).map(function(k){ return by[k]; }).sort(function(a, b){ return b.sum - a.sum; });
-  var h = mSwitch();
+  var h = mSwitch() + whoFilter('st-who', 'data-sw', w);
   var off = 0, ring = '';
   cats.forEach(function(c){
     var len = total ? c.sum / total * CIRC : 0, vis = cats.length > 1 ? Math.max(0, len - 2.2) : len;
@@ -1242,7 +1294,7 @@ function vIncome(){
     off += len;
   });
   h += '<section class="card"><div class="donut"><svg viewBox="0 0 200 200" aria-hidden="true"><circle class="ring" cx="100" cy="100" r="80"></circle>' + ring + '</svg>' +
-       '<div class="ctr"><small>Поступило</small><b data-num="in-tot" data-v="' + total + '" data-round></b></div></div>';
+       '<div class="ctr"><small>' + (w === 'all' ? 'Поступило' : esc(pName(w))) + '</small><b data-num="in-tot" data-v="' + total + '" data-round></b></div></div>';
   if (prev > 0 && total > 0){
     var pc = Math.round((total - prev) / prev * 100);
     h += '<div class="delta"><span class="' + (pc > 0 ? 'dn' : pc < 0 ? 'up' : '') + '">' + (pc > 0 ? '▲ ' + pc : pc < 0 ? '▼ ' + (-pc) : '0') + '% к прошлому месяцу</span></div>';
@@ -1282,7 +1334,7 @@ function vIncome(){
   return h;
 }
 function vOverview(){
-  var m = S.month, w = S.statsWho;
+  var m = S.month, w = per(S.statsWho) ? S.statsWho : 'all';
   function f(t){ return t.type === 'expense' && (w === 'all' || t.who === w); }
   var exp = txOfMonth(m).filter(f), total = sum(exp);
   var prevTotal = sum(txOfMonth(shiftMonth(m, -1)).filter(f));
@@ -1292,7 +1344,7 @@ function vOverview(){
   var cats = Object.keys(byCat).map(function(k){ return byCat[k]; }).sort(function(a, b){ return b.sum - a.sum; });
   function cInfo(id){ var c = catOf(id); return c ? {name:c.name, color:okColor(c.color)} : {name:'Без категории', color:'var(--nocat)'}; }
 
-  var h = mSwitch();
+  var h = mSwitch() + whoFilter('st-who', 'data-sw', w);
   var off = 0, ring = '';
   cats.forEach(function(c){
     var len = total ? c.sum / total * CIRC : 0, vis = cats.length > 1 ? Math.max(0, len - 2.2) : len;
@@ -1300,7 +1352,7 @@ function vOverview(){
     off += len;
   });
   h += '<section class="card"><div class="donut"><svg viewBox="0 0 200 200" aria-hidden="true"><circle class="ring" cx="100" cy="100" r="80"></circle>' + ring + '</svg>' +
-       '<div class="ctr"><small>Потрачено</small><b data-num="st-tot" data-v="' + total + '" data-round></b></div></div>';
+       '<div class="ctr"><small>' + (w === 'all' ? 'Потрачено' : esc(pName(w))) + '</small><b data-num="st-tot" data-v="' + total + '" data-round></b></div></div>';
   if (prevTotal > 0 && total > 0){
     var pct = Math.round((total - prevTotal) / prevTotal * 100);
     h += '<div class="delta"><span class="' + (pct > 0 ? 'up' : pct < 0 ? 'dn' : '') + '">' + (pct > 0 ? '▲ ' + pct : pct < 0 ? '▼ ' + (-pct) : '0') + '% к прошлому месяцу</span></div>';
@@ -1312,12 +1364,21 @@ function vOverview(){
   }).join('') : '<div class="empty">Добавь трату, и здесь появится разбивка по категориям.</div>';
   h += '</section>';
 
+  if (w === 'all' && multi()){
+    var pp = {}; exp.forEach(function(t){ pp[t.who] = (pp[t.who] || 0) + t.amount; });
+    var pl = members().concat(exp.some(function(t){ return !per(t.who); }) ? [{id:'_none', name:'Без участника', color:'#8A93A6'}] : []);
+    h += '<section class="card"><h2>Кто сколько потратил</h2><div class="split" style="height:12px;margin-bottom:8px;background:var(--surface-2)">' +
+      pl.map(function(p){ var v = p.id === '_none' ? sum(exp.filter(function(t){ return !per(t.who); })) : (pp[p.id] || 0); p._v = v;
+        return '<i data-ak="st-pp-' + esc(p.id) + '" data-kind="w" data-a="' + (total ? v / total * 100 : 0).toFixed(2) + '" style="background:' + okColor(p.color) + ';box-shadow:inset 2px 0 0 var(--surface)"></i>'; }).join('') + '</div>' +
+      pl.map(function(p){ return '<button class="kv" data-sw="' + esc(p.id === '_none' ? 'all' : p.id) + '" style="width:100%;text-align:left"><span><span class="dot" style="background:' + okColor(p.color) + '"></span>' + esc(p.name) + '</span><b>' + money(p._v, true) + ' <span class="cnt">· ' + (total ? Math.round(p._v / total * 100) : 0) + '%</span></b></button>'; }).join('') +
+      '</section>';
+  }
   var lc = limitCats();
   if (lc.length) h += '<section class="card"><h2>Лимиты за ' + esc(monthName(m)) + '</h2>' + lc.map(function(c){ return limRow(c, m, 'st-lim-'); }).join('') + '</section>';
 
   var dim = daysIn(m), days = [];
-  for (var i = 0; i < dim; i++) days.push({a:0,n:0,s:0,t:0});
-  exp.forEach(function(t){ var d = +t.date.slice(8,10) - 1; if (days[d]){ days[d].a += t.amount; days[d].t += t.amount; } });
+  for (var i = 0; i < dim; i++) days.push({t:0});
+  exp.forEach(function(t){ var d = +t.date.slice(8,10) - 1; if (days[d]){ days[d][t.who] = (days[d][t.who] || 0) + t.amount; days[d].t += t.amount; } });
   var mx = 1; days.forEach(function(d){ if (d.t > mx) mx = d.t; });
   var isCur = m === curMonth(), tday = new Date().getDate(), elapsed = isCur ? tday : dim;
   var lbls = [1,5,10,15,20,25,dim];
@@ -1325,7 +1386,8 @@ function vOverview(){
   days.forEach(function(d, i){
     var cls = 'day' + (isCur && i + 1 === tday ? ' today' : '');
     if (!d.t){ h += '<div class="' + cls + '"><i class="z"></i></div>'; return; }
-    h += '<div class="' + cls + '"><i data-ak="st-dy-' + (i+1) + '" data-kind="h" data-a="' + (d.t / mx * 100).toFixed(2) + '" style="background:var(--pa)"></i></div>';
+    var ks = Object.keys(d).filter(function(k){ return k !== 't' && d[k]; });
+    h += '<div class="' + cls + '">' + ks.map(function(k){ return '<i data-ak="st-dy-' + (i+1) + '-' + esc(k) + '" data-kind="h" data-a="' + (d[k] / mx * 100).toFixed(2) + '" style="background:' + (multi() ? pColor(k) : 'var(--pa)') + '"></i>'; }).join('') + '</div>';
   });
   h += '</div><div class="dl" aria-hidden="true">';
   for (var j = 1; j <= dim; j++) h += '<span>' + (lbls.indexOf(j) > -1 && !(j === 25 && dim - 25 < 3) ? j : '') + '</span>';
@@ -1352,9 +1414,9 @@ function vOverview(){
 }
 
 function vHistory(){
-  var m = S.month, w = S.histWho, ty = S.histType;
-  var list = txOfMonth(m).filter(function(t){ return ty === 'all' || t.type === ty; }).sort(sortTx);
-  var h = mSwitch() + seg('hi-type', 'data-ht', [['all','Всё'],['expense','Траты'],['income','Поступления']], ty);
+  var m = S.month, w = per(S.histWho) ? S.histWho : 'all', ty = S.histType;
+  var list = txOfMonth(m).filter(function(t){ return (w === 'all' || t.who === w) && (ty === 'all' || t.type === ty); }).sort(sortTx);
+  var h = mSwitch() + whoFilter('hi-who', 'data-hw', w) + seg('hi-type', 'data-ht', [['all','Всё'],['expense','Траты'],['income','Поступления']], ty);
   if (!list.length) return h + '<section class="card"><div class="empty">За ' + esc(monthLabel(m).toLowerCase()) + ' ничего не найдено.</div></section>';
   var groups = [], cur = null;
   list.forEach(function(t){ if (!cur || cur.date !== t.date){ cur = {date:t.date, items:[]}; groups.push(cur); } cur.items.push(t); });
@@ -1445,6 +1507,15 @@ function vSettings(){
       '<button class="mini" data-wdn="' + w.id + '" aria-label="Ниже"' + (i === PR.widgets.length - 1 ? ' disabled' : '') + '>' + ICON_DN + '</button>' +
       '<button class="switch" data-wsw="' + w.id + '" role="switch" aria-checked="' + w.on + '" aria-label="' + esc(meta[1]) + '"></button></div>';
   }).join('') + '<p class="note">Порядок и выбор виджетов тоже свои на каждом телефоне.</p></section>';
+
+  var pc = {}; S.tx.forEach(function(t){ pc[t.who] = (pc[t.who] || 0) + 1; });
+  h += '<section class="card"><h2>Участники <span class="cnt" style="text-transform:none;letter-spacing:0">' + members().length + '</span></h2><div>' +
+    members().map(function(p){
+      var n = pc[p.id] || 0;
+      return '<button class="crow" data-per="' + esc(p.id) + '"><span class="sw" style="background:' + okColor(p.color) + ';border-radius:50%"></span><span class="mid"><span>' + esc(p.name) + (p.id === defWho() && multi() ? ' <span class="chipst ok" style="margin-left:4px">по умолчанию</span>' : '') + '</span><span class="cnt">' + (n ? n + ' ' + plural(n, 'операция', 'операции', 'операций') : 'Пока без операций') + '</span></span>' + CHEV + '</button>';
+    }).join('') +
+    '</div><div class="stack" style="margin-top:10px"><button class="btn ghost sm" data-act="newper">Добавить участника</button></div>' +
+    '<p class="note">Например, «Влад» или «Общие». Если участник один, выбор «кто потратил» не показывается.</p></section>';
 
   h += '<section class="card"><h2>Деньги</h2>' +
     '<div class="kv"><span>Баланс</span><b data-num="se-bal" data-v="' + balance() + '"></b></div>' +
@@ -1563,9 +1634,10 @@ function arm(btn, label){ if (btn.classList.contains('armed')) return true; btn.
 var F = null;
 function amtKop(s){ if (!s) return 0; var p = s.split(','); return (+p[0] || 0) * 100 + (+((p[1] || '') + '00').slice(0, 2)); }
 function openTx(t){
-  F = t ? {mode:'edit', id:t.id, type:t.type, amt:kopToInput(t.amount), who:'a', cat:t.cat || null, date:t.date, note:t.note || ''}
-        : {mode:'add', id:null, type:'expense', amt:'', who:'a', cat:null, date:today(), note:''};
+  F = t ? {mode:'edit', id:t.id, type:t.type, amt:kopToInput(t.amount), who:t.who || defWho(), cat:t.cat || null, date:t.date, note:t.note || ''}
+        : {mode:'add', id:null, type:'expense', amt:'', who:defWho(), cat:null, date:today(), note:''};
   $('#txTitle').textContent = F.mode === 'edit' ? 'Изменить' : 'Новая операция';
+  whoChips($('#fWho'), 'data-fw');
   fillCats();
   if (t){ F.origCat = t.cat; F.origM = String(t.date).slice(0,7); F.origAmt = t.type === 'expense' ? t.amount : 0; }
   $('#fNote').value = F.note;
@@ -1583,6 +1655,7 @@ function fillCats(){
 function syncTx(){
   setSeg($('#fType'), F.type === 'income' ? 1 : 0);
   pressSet($('#fType'), 'data-ft', F.type);
+  pressSet($('#fWho'), 'data-fw', F.who);
   pressSet($('#fCats'), 'data-fc', F.cat);
   var lc = F.type === 'expense' ? catOf(F.cat) : null, fl = $('#fLim');
   if (lc && +lc.limit > 0){
@@ -1617,6 +1690,7 @@ function press(k){
   F.amt = s; updAmt();
 }
 $('#pad').addEventListener('click', function(e){ var b = e.target.closest('[data-k]'); if (b) press(b.getAttribute('data-k')); });
+$('#fWho').addEventListener('click', function(e){ var b = e.target.closest('[data-fw]'); if (b){ F.who = b.getAttribute('data-fw'); syncTx(); } });
 $('#fType').addEventListener('click', function(e){ var b = e.target.closest('[data-ft]'); if (!b) return; var nt = b.getAttribute('data-ft'); if (nt !== F.type){ F.type = nt; F.cat = null; fillCats(); } syncTx(); });
 $('#fCats').addEventListener('click', function(e){ var b = e.target.closest('[data-fc]'); if (b){ F.cat = b.getAttribute('data-fc'); syncTx(); } });
 $('#fDate').addEventListener('change', function(e){ if (e.target.value){ F.date = e.target.value; syncTx(); } });
@@ -1711,14 +1785,15 @@ function openPlan(p, inc){
   if (p){
     var cnt = p.count || 0, paid = p.paid || 0;
     var shown = isDone(p) ? dueDate(p, Math.max(0, cnt - 1)) : nextDue(p);
-    PL = {id:p.id, orig:p, kind:PK[p.kind] ? p.kind : 'credit', who:'a', inc:!!p.inc};
+    PL = {id:p.id, orig:p, kind:PK[p.kind] ? p.kind : 'credit', who:p.who || defWho(), inc:!!p.inc};
     $('#pName').value = p.name || ''; $('#pAmt').value = kopToInput(p.amount); $('#pDate').value = shown;
     $('#pCount').value = cnt || ''; $('#pPaid').value = paid;
   } else {
-    PL = {id:null, orig:null, kind:inc ? 'regular' : 'credit', who:'a', inc:!!inc};
+    PL = {id:null, orig:null, kind:inc ? 'regular' : 'credit', who:defWho(), inc:!!inc};
     $('#pName').value = ''; $('#pAmt').value = ''; $('#pDate').value = today(); $('#pCount').value = ''; $('#pPaid').value = '0';
   }
   $('#pTitle').textContent = PL.inc ? (p ? 'Поступление' : 'Новое поступление') : (p ? 'Платёж' : 'Новый платёж');
+  whoChips($('#pWho'), 'data-pw'); $('#pWhoWrap').hidden = !multi();
   var u = $('#pUndo'); u.hidden = !(p && (p.paid || 0) > 0); u.classList.remove('armed'); u.textContent = 'Отменить последнюю оплату';
   var d = $('#pDel'); d.hidden = !p; d.classList.remove('armed'); d.textContent = PL.inc ? 'Удалить поступление' : 'Удалить платёж';
   syncPlan(); openSheet('sPlan');
@@ -1732,6 +1807,8 @@ function planFromForm(){
 function syncPlan(){
   setSeg($('#pKind'), PK_ORDER.indexOf(PL.kind)); pressSet($('#pKind'), 'data-pk', PL.kind);
   $('#pIncSw').setAttribute('aria-checked', String(PL.inc));
+  pressSet($('#pWho'), 'data-pw', PL.who);
+  $('#pWhoWrap').firstChild.textContent = PL.inc ? 'Кому приходит' : 'Чей платёж';
   var multi = PL.kind === 'credit' || PL.kind === 'parts';
   $('#pCountWrap').classList.toggle('shut', !multi);
   $('#pDateLbl').textContent = PL.kind === 'once' ? 'Дата платежа' : 'Следующий платёж';
@@ -1749,6 +1826,7 @@ function syncPlan(){
   $('#pSum').innerHTML = s || 'Заполни сумму и дату, и тут появится расчёт.';
 }
 $('#pKind').addEventListener('click', function(e){ var b = e.target.closest('[data-pk]'); if (b){ PL.kind = b.getAttribute('data-pk'); syncPlan(); } });
+$('#pWho').addEventListener('click', function(e){ var b = e.target.closest('[data-pw]'); if (b){ PL.who = b.getAttribute('data-pw'); syncPlan(); } });
 $('#pInc').addEventListener('click', function(){ PL.inc = !PL.inc; if (PL.inc && (PL.kind === 'credit' || PL.kind === 'parts')) PL.kind = 'regular'; syncPlan(); $('#pTitle').textContent = PL.inc ? (PL.id ? 'Поступление' : 'Новое поступление') : (PL.id ? 'Платёж' : 'Новый платёж'); });
 ['#pAmt','#pDate','#pCount','#pPaid'].forEach(function(s){ $(s).addEventListener('input', syncPlan); $(s).addEventListener('change', syncPlan); });
 $('#pSave').addEventListener('click', function(){
@@ -1760,7 +1838,7 @@ $('#pSave').addEventListener('click', function(){
   if (isNaN(f.paid) || (f.count > 0 && f.paid > f.count)){ shake($('#pPaid').parentNode); toast('Оплачено не может быть больше, чем всего'); return; }
   var m = f.date.slice(0,7), done = f.count > 0 && f.paid >= f.count;
   var start = shiftMonth(m, -(done ? f.count - 1 : f.paid));
-  var d = {name:name, kind:f.k, amount:f.amt, count:f.count, paid:f.paid, start:start, day:+f.date.slice(8,10), inc:PL.inc};
+  var d = {name:name, kind:f.k, amount:f.amt, count:f.count, paid:f.paid, start:start, day:+f.date.slice(8,10), inc:PL.inc, who:PL.who};
   if (PL.inc && !(PL.orig && PL.orig.cat)) d.cat = guessIncCat(name);
   var p;
   if (PL.id) p = store.patch('plans', PL.id, d);
@@ -1795,7 +1873,7 @@ function guessExpCat(p){
 
 var PY = null;
 function openPay(p){
-  PY = {p:p, who:'a', bal:true, inc:!!p.inc, cat:p.inc ? (icatOf(p.cat) ? p.cat : guessIncCat(p.name)) : guessExpCat(p)};
+  PY = {p:p, who:per(p.who) ? p.who : defWho(), bal:true, inc:!!p.inc, cat:p.inc ? (icatOf(p.cat) ? p.cat : guessIncCat(p.name)) : guessExpCat(p)};
   $('#yTitle').textContent = p.name;
   var nd = nextDue(p);
   $('#ySub').textContent = (p.count > 1 ? 'Платёж ' + ((p.paid || 0) + 1) + ' из ' + p.count + ' · ' : '') + (p.inc ? 'ждём ' : 'по графику ') + shortDate(nd).toLowerCase();
@@ -1822,7 +1900,7 @@ $('#ySave').addEventListener('click', function(){
   if (PY.bal && !p.inc && !PY.cat){ shake($('#yCats')); toast('Выбери категорию'); return; }
   var txId = PY.bal ? uid() : null, cid = PY.cat;
   var chain = PY.bal ? (!p.inc && cid === 'c13' && !catOf('c13') ? ensureLoanCat() : Promise.resolve(cid)).then(function(c2){
-    return store.put('tx', txId, {type:p.inc ? 'income' : 'expense', amount:amt, who:'a', cat:c2 || null, date:today(), note:p.name.slice(0, 80), by:S.email || 'demo', ts:Date.now(), plan:p.id});
+    return store.put('tx', txId, {type:p.inc ? 'income' : 'expense', amount:amt, who:PY.who, cat:c2 || null, date:today(), note:p.name.slice(0, 80), by:S.email || 'demo', ts:Date.now(), plan:p.id});
   }) : Promise.resolve();
   chain.then(function(){
     var pt = {paid:(p.paid || 0) + 1, log:(p.log || []).concat([{d:today(), a:amt, tx:txId}]).slice(-60)};
@@ -1833,7 +1911,42 @@ $('#ySave').addEventListener('click', function(){
   closeSheet();
 });
 
+/* ================= участники ================= */
+var PE = null;
+function openPer(p){
+  var used = members().map(function(x){ return okColor(x.color); });
+  PE = p ? {id:p.id, name:p.name, color:okColor(p.color), def:defWho() === p.id}
+         : {id:null, name:'', color:P_COLORS.filter(function(c){ return used.indexOf(c) < 0; })[0] || P_COLORS[members().length % P_COLORS.length], def:false};
+  $('#mTitle').textContent = p ? p.name : 'Новый участник';
+  $('#mName').value = PE.name;
+  $('#mColors').innerHTML = P_COLORS.map(function(c){ return '<button type="button" data-mc="' + c + '" style="background:' + c + '" aria-label="Цвет ' + c + '"></button>'; }).join('');
+  var d = $('#mDel'); d.hidden = !p || members().length < 2; d.classList.remove('armed'); d.textContent = 'Удалить участника';
+  syncPer(); openSheet('sPer');
+}
+function syncPer(){ pressSet($('#mColors'), 'data-mc', PE.color); $('#mDefSw').setAttribute('aria-checked', String(PE.def)); }
+$('#mColors').addEventListener('click', function(e){ var b = e.target.closest('[data-mc]'); if (b){ PE.color = b.getAttribute('data-mc'); syncPer(); } });
+$('#mDef').addEventListener('click', function(){ PE.def = !PE.def; syncPer(); });
+$('#mSave').addEventListener('click', function(){
+  var name = $('#mName').value.trim().slice(0, 20);
+  if (!name){ shake($('#mName').parentNode); toast('Впиши имя'); return; }
+  if (members().some(function(x){ return x.id !== PE.id && String(x.name).toLowerCase() === name.toLowerCase(); })){ toast('Такой участник уже есть'); return; }
+  var id = PE.id || uid(), ex = per(id), mx = -1;
+  members().forEach(function(x){ if ((x.order || 0) > mx) mx = x.order || 0; });
+  var d = {name:name, color:PE.color, order:ex && ex.order != null ? ex.order : mx + 1};
+  if (PE.def) PR.me = id; else if (PR.me === id) delete PR.me;
+  savePrefs();
+  var p = S.people.length || !PE.id ? store.put('people', id, d) : Promise.all(members().map(function(x){ return store.put('people', x.id, x.id === id ? d : {name:x.name, color:okColor(x.color), order:x.order || 0}); }));
+  p.catch(dbErr); toast(PE.id ? 'Сохранено' : 'Участник добавлен'); closeSheet();
+});
+$('#mDel').addEventListener('click', function(){
+  var n = S.tx.filter(function(t){ return t.who === PE.id; }).length;
+  if (!arm($('#mDel'), n ? 'Удалить? ' + n + ' ' + plural(n, 'операция останется', 'операции останутся', 'операций останутся') + ' без участника' : 'Нажми ещё раз, чтобы удалить')) return;
+  if (PR.me === PE.id){ delete PR.me; savePrefs(); }
+  store.del('people', PE.id).catch(dbErr); toast('Участник удалён'); closeSheet();
+});
+
 /* ================= депозиты ================= */
+
 var DE = null;
 function pctToInput(v){ return v ? String(Math.round(v) / 100).replace('.', ',') : ''; }
 function openDep(d){
@@ -2008,9 +2121,10 @@ $('#oSave').addEventListener('click', function(){
 
 /* ================= клики по экранам ================= */
 document.addEventListener('click', function(e){
-  var t = e.target.closest('[data-tab],[data-ic],[data-tx],[data-go],[data-m],[data-sm],[data-sw],[data-hw],[data-ht],[data-cat],[data-act],[data-plan],[data-pay],[data-th],[data-wup],[data-wdn],[data-wsw],[data-usd],[data-usdop],[data-dep]');
+  var t = e.target.closest('[data-per],[data-tab],[data-ic],[data-tx],[data-go],[data-m],[data-sm],[data-sw],[data-hw],[data-ht],[data-cat],[data-act],[data-plan],[data-pay],[data-th],[data-wup],[data-wdn],[data-wsw],[data-usd],[data-usdop],[data-dep]');
   if (!t || t.closest('.sheet')) return;
   if (t.hasAttribute('data-tab')) return go(t.getAttribute('data-tab'));
+  if (t.hasAttribute('data-per')){ var pr = per(t.getAttribute('data-per')); if (pr) openPer(pr); return; }
   if (t.hasAttribute('data-usd')){ var uu = byId(S.usd, t.getAttribute('data-usd')); if (uu) openUsd(uu); return; }
   if (t.hasAttribute('data-usdop')){ var uo = byId(S.usd, t.getAttribute('data-usdop')); if (uo) openUsdOp(uo); return; }
   if (t.hasAttribute('data-dep')){ var dd = byId(S.deps, t.getAttribute('data-dep')); if (dd) openDep(dd); return; }
@@ -2024,7 +2138,7 @@ document.addEventListener('click', function(e){
   if (t.hasAttribute('data-go')){
     var g = t.getAttribute('data-go');
     if (g === 'history'){ S.statsMode = 'history'; S.month = curMonth(); return go('stats'); }
-    if (g === 'stats'){ S.statsMode = 'overview'; S.month = curMonth(); }
+    if (g === 'stats'){ S.statsMode = 'overview'; S.month = curMonth(); if (t.hasAttribute('data-who')) S.statsWho = t.getAttribute('data-who'); }
     return go(g);
   }
   if (t.hasAttribute('data-m')){ if (t.disabled) return; S.month = shiftMonth(S.month, +t.getAttribute('data-m')); return render(); }
@@ -2047,6 +2161,7 @@ document.addEventListener('click', function(e){
   if (a === 'newicat') return openCat(null, 'inc');
   if (a === 'newplan') return openPlan(null);
   if (a === 'newinc') return openPlan(null, true);
+  if (a === 'newper') return openPer(null);
   if (a === 'newdep') return openDep(null);
   if (a === 'newusd') return openUsd(null);
   if (a === 'limits'){ go('settings'); setTimeout(function(){ var el = document.getElementById('catsCard'); if (el) el.scrollIntoView({behavior:'smooth', block:'start'}); }, 80); toast('Нажми на категорию, чтобы поставить лимит', 3000); return; }
@@ -2080,6 +2195,7 @@ function onData(c, list){
   }
   else if (c === 'deps') S.deps = list.filter(function(d){ return d && typeof d.amount === 'number' && /^\d{4}-\d{2}-\d{2}$/.test(d.start || '') && /^\d{4}-\d{2}-\d{2}$/.test(d.end || ''); }).sort(function(a, b){ return (a.ts || 0) - (b.ts || 0); });
   else if (c === 'plans') S.plans = list.filter(function(p){ return p && typeof p.amount === 'number' && /^\d{4}-\d{2}$/.test(p.start || ''); });
+  else if (c === 'people') S.people = list.filter(function(p){ return p && p.name; }).sort(function(a, b){ return (a.order || 0) - (b.order || 0) || String(a.name).localeCompare(String(b.name)); });
   else if (c === 'usd') S.usd = list.filter(function(k){ return k && typeof k === 'object'; }).sort(function(a, b){ return (a.ts || 0) - (b.ts || 0); });
   queueRender();
 }

@@ -1,5 +1,5 @@
 // Офлайн-кэш приложения. При обновлении файлов поменяй номер версии.
-var CACHE = 'moi-finansy-v1';
+var CACHE = 'moi-finansy-v2';
 var SHELL = ['./', './index.html', './config.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
