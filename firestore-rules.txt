@@ -5,7 +5,7 @@ service cloud.firestore {
     // Впиши почту, под которой будет вход (та же, что в config.js), маленькими буквами
     function isOwner() {
       return request.auth != null
-        && request.auth.token.email in ['ПОЧТА@gmail.com'];
+        && request.auth.token.email in ['paskonata81@gmail.com'];
     }
 
     match /{document=**} {

@@ -11,13 +11,13 @@
 
 window.APP_CONFIG = {
   firebase: {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: ""
+    apiKey: "AIzaSyAxXG4Pj3KkPvi_wBLlLj_LGcmde-dOHWo",
+    authDomain: "finansy-6e0e5.firebaseapp.com",
+    projectId: "finansy-6e0e5",
+    storageBucket: "finansy-6e0e5.firebasestorage.app",
+    messagingSenderId: "580118901599",
+    appId: "1:580118901599:web:4c6e17178916db6920fcea"
   },
 
-  owner: { name: "Наташа", email: "" }
+  owner: { name: "Наташа", email: "paskonata81@gmail.com" }
 };
