@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Впиши почту, под которой будет вход (та же, что в config.js), маленькими буквами
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email in ['ПОЧТА@gmail.com'];
+    }
+
+    match /{document=**} {
+      allow read, write: if isOwner();
+    }
+  }
+}
