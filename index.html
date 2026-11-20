@@ -581,6 +581,23 @@ input{font:inherit;color:inherit}
   <button class="btn" id="ySave" type="button">Отметить оплату</button>
 </section>
 
+<!-- Цель -->
+<section class="sheet" id="sGoal" role="dialog" aria-modal="true" aria-labelledby="gTitle">
+  <div class="grab"></div>
+  <div class="sh-h"><h3 id="gTitle">Новая цель</h3><button class="x" data-close aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <label class="field"><input id="gName" type="text" maxlength="30" placeholder="На что копим, например «Квартира»" autocomplete="off"></label>
+  <div class="fl">Сколько нужно</div>
+  <div class="inrow">
+    <label class="field"><input id="gTarget" type="text" inputmode="decimal" placeholder="100000" autocomplete="off"></label>
+    <div class="seg" id="gCur" style="--n:2"><span class="ind"></span><button type="button" data-gc="USD">$</button><button type="button" data-gc="UAH">₴</button></div>
+  </div>
+  <div class="fl">Сколько уже есть</div>
+  <label class="field"><input id="gNow" type="text" inputmode="decimal" placeholder="0" autocomplete="off"><span class="suf" id="gNowSuf">$</span></label>
+  <div class="summary" id="gSum"></div>
+  <button class="btn" id="gSave" type="button">Сохранить</button>
+  <button class="btn danger" id="gDel" type="button" hidden>Удалить цель</button>
+</section>
+
 <!-- Участник -->
 <section class="sheet" id="sPer" role="dialog" aria-modal="true" aria-labelledby="mTitle">
   <div class="grab"></div>
@@ -815,7 +832,7 @@ applyTheme();
 if (window.matchMedia) try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme); } catch(e){}
 
 /* ================= состояние ================= */
-var S = { tx:[], cats:[], icats:[], plans:[], deps:[], usd:[], people:[], settings:{startBalance:0}, me:'a', email:'', view:'home', month:curMonth(),
+var S = { tx:[], cats:[], icats:[], plans:[], deps:[], usd:[], people:[], goals:[], settings:{startBalance:0}, me:'a', email:'', view:'home', month:curMonth(),
   statsMode:'overview', statsWho:'all', histWho:'all', histType:'all', ready:{tx:false,cats:false} };
 var store = null;
 
@@ -935,10 +952,11 @@ function makeDemo(){
   return { tx:tx, categories:DEFAULT_CATS.map(function(c,i){ var o = {id:c[0], name:c[1], color:c[2], order:i}; if (c[0] === 'c01') o.limit = 1200000; if (c[0] === 'c02') o.limit = 150000; if (c[0] === 'c06') o.limit = 300000; return o; })
       .concat(DEFAULT_INC.map(function(c,i){ return {id:c[0], name:c[1], color:c[2], order:i, kind:'inc'}; })),
     plans:plans, deps:deps, usd:usdL, settings:{startBalance:1500000, budget:2500000, seeded:true},
+    goals:[{id:'g1', name:'Квартира', target:10000000, cur:'USD', now:3400000, ts:1, hist:[{d:ahead(-300), v:1200000}, {d:ahead(-210), v:1800000}, {d:ahead(-120), v:2500000}, {d:ahead(-45), v:3000000}, {d:ahead(-3), v:3400000}]}],
     people:[{id:'a', name:MY_NAME || 'Наташа', color:'#2F67F0', order:0}, {id:'v', name:'Влад', color:'#E04C79', order:1}, {id:'s', name:'Общие', color:'#14946B', order:2}] };
 }
 
-var COLS = ['tx','categories','plans','deps','usd','people'];
+var COLS = ['tx','categories','plans','deps','usd','people','goals'];
 function DemoStore(){
   var KEY = 'moi-finansy-demo-v1', data = null;
   try { data = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch(e){}
@@ -1242,12 +1260,16 @@ function planCard(title){
 }
 W.plan = function(){ return planCard('План на ' + esc(monthName(curMonth()))); };
 W.savings = function(){
-  if (!S.usd.length && !S.deps.length) return '<section class="card"><h2>Сбережения</h2><p class="note" style="margin:0 0 12px">Здесь будут доллары и депозиты: сколько есть, сколько ещё собрать и сколько принесут проценты.</p><button class="btn ghost sm" data-go="capital">Открыть сбережения</button></section>';
+  if (!S.usd.length && !S.deps.length && !S.goals.length) return '<section class="card"><h2>Сбережения</h2><p class="note" style="margin:0 0 12px">Здесь будут доллары и депозиты: сколько есть, сколько ещё собрать и сколько принесут проценты.</p><button class="btn ghost sm" data-go="capital">Открыть сбережения</button></section>';
   var dU = depSum('UAH'), dD = depSum('USD'), net = 0, netU = 0;
   S.deps.forEach(function(d){ var i = depInfo(d); if ((d.cur || 'UAH') === 'USD') netU += i.net; else net += i.net; });
   var h = '<section class="card"><h2>Сбережения<button class="link" data-go="capital">Открыть</button></h2>';
   h += '<div class="trio"><div><small>Доллары</small><b>' + usd(usdAll(), true) + '</b></div><div><small>Депозиты ₴</small><b>' + money(dU, true) + '</b></div><div><small>Депозиты $</small><b>' + usd(dD, true) + '</b></div></div>';
+  h += S.goals.map(function(g){ var i = goalInfo(g), cur = g.cur || 'USD';
+    return '<div class="lg" data-go="capital" style="cursor:pointer"><span class="dot" style="background:' + GOAL_C + '"></span><div class="mid"><div class="lt"><span>' + esc(g.name || 'Цель') + '</span><b>' + inCur(i.n, cur, true) + ' из ' + inCur(i.t, cur, true) + '</b></div>' +
+      '<div class="track"><span class="fill" data-ak="wg-' + esc(g.id) + '" data-kind="w" data-a="' + i.pct.toFixed(1) + '" style="background:' + GOAL_C + '"></span></div></div><span class="pct">' + Math.round(i.pct) + '%</span></div>'; }).join('');
   h += S.usd.slice(0, 3).map(usdRow).join('');
+
   if (net || netU) h += '<p class="note">Депозиты принесут ' + [net ? '+' + money(net, true) : '', netU ? '+' + usd(netU, true) : ''].filter(Boolean).join(' и ') + ' после налога.</p>';
   return h + '</section>';
 };
@@ -1461,9 +1483,53 @@ function vPlans(){
   return h;
 }
 
+var GOAL_C = '#8B5CF6';
+function goalInfo(g){
+  var t = +g.target || 0, n = +g.now || 0, i = {t:t, n:n, pct:t ? Math.max(0, Math.min(100, n / t * 100)) : 0, left:Math.max(0, t - n), eta:null, perMonth:0};
+  var h = (g.hist || []).filter(function(x){ return x && x.d; }).slice().sort(function(a, b){ return a.d.localeCompare(b.d); });
+  if (h.length >= 2){
+    var a = h[0], b = h[h.length - 1], days = Math.round((toDate(b.d) - toDate(a.d)) / 86400000);
+    if (days >= 14 && b.v > a.v){
+      var perDay = (b.v - a.v) / days; i.perMonth = Math.round(perDay * 30.4);
+      if (i.left > 0){ var e = new Date(); e.setDate(e.getDate() + Math.ceil(i.left / perDay)); i.eta = e; }
+    }
+  }
+  i.hist = h;
+  return i;
+}
+function goalCard(g){
+  var i = goalInfo(g), cur = g.cur || 'USD', len = i.pct / 100 * CIRC, done = i.t && i.n >= i.t;
+  var pctTxt = i.pct >= 10 || i.pct === 0 ? Math.round(i.pct) : sp(NF.format(Math.floor(i.pct * 10) / 10));
+  var h = '<section class="card"><h2><span style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:' + GOAL_C + '"></span>' + esc(g.name || 'Цель') + '</span><button class="link" data-goal="' + esc(g.id) + '">Изменить</button></h2>';
+  h += '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">' +
+    '<div class="donut" style="width:150px;height:150px;margin:0;flex:none"><svg viewBox="0 0 200 200" aria-hidden="true"><circle class="ring" cx="100" cy="100" r="80" style="stroke-width:18"></circle>' +
+    '<circle class="sg" cx="100" cy="100" r="80" stroke="' + (done ? 'var(--inc)' : GOAL_C) + '" style="stroke-width:18;stroke-linecap:round" data-ak="gl-' + esc(g.id) + '" data-kind="dash" data-a="' + Math.max(len, i.pct > 0 ? 1 : 0).toFixed(2) + '" data-b="0"></circle></svg>' +
+    '<div class="ctr"><b style="font-size:30px">' + pctTxt + '%</b><small>' + (done ? 'цель достигнута!' : 'пройдено') + '</small></div></div>' +
+    '<div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:8px">' +
+      '<div><small class="cnt">Сейчас есть</small><div style="font:600 22px/1.2 var(--f-display);font-variant-numeric:tabular-nums">' + inCur(i.n, cur, true) + '</div></div>' +
+      '<div><small class="cnt">Цель</small><div style="font-weight:700;font-variant-numeric:tabular-nums">' + inCur(i.t, cur, true) + '</div></div>' +
+      (done ? '' : '<div><small class="cnt">Осталось собрать</small><div style="font-weight:700;color:' + GOAL_C + ';font-variant-numeric:tabular-nums">' + inCur(i.left, cur, true) + '</div></div>') +
+    '</div></div>';
+  // шкала с отметками 25/50/75%
+  h += '<div style="position:relative;margin:16px 0 4px"><div class="track" style="height:10px"><span class="fill" data-ak="glb-' + esc(g.id) + '" data-kind="w" data-a="' + i.pct.toFixed(2) + '" style="background:' + (done ? 'var(--inc)' : GOAL_C) + '"></span></div>' +
+    '<div class="dl" style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;color:var(--muted)"><span>0</span><span>25%</span><span>50%</span><span>75%</span><span>' + inCur(i.t, cur, true) + '</span></div></div>';
+  if (i.hist.length >= 2){
+    var hs = i.hist.slice(-12), mx = i.t || 1;
+    hs.forEach(function(x){ if (x.v > mx) mx = x.v; });
+    h += '<div class="spark" aria-hidden="true" style="height:40px">' + hs.map(function(x, j){ return '<i class="' + (j === hs.length - 1 ? 't' : '') + '" data-ak="gls-' + esc(g.id) + '-' + j + '" data-kind="h" data-a="' + (x.v / mx * 100).toFixed(1) + '" style="background:' + GOAL_C + '"></i>'; }).join('') + '</div>';
+  }
+  var note = '';
+  if (done) note = 'Цель собрана! Можно поставить новую.';
+  else if (i.eta) note = 'В среднем +' + inCur(i.perMonth, cur, true) + ' в месяц. В таком темпе цель будет примерно в ' + esc(monthName(dstr(i.eta).slice(0,7))) + ' ' + i.eta.getFullYear() + '.';
+  else note = 'Обновляй сумму время от времени, и приложение посчитает темп и когда цель будет собрана.';
+  h += '<p class="note">' + note + '</p>';
+  h += '<div class="stack" style="margin-top:10px"><button class="btn sm" data-goalnow="' + esc(g.id) + '">Обновить, сколько сейчас</button></div></section>';
+  return h;
+}
 function vSavings(){
   var u = usdAll(), dU = depSum('UAH'), dD = depSum('USD'), r = lastRate(), totU = u + dD;
-  var h = '<section class="hero"><div><div class="lbl">Доллары всего</div><div class="big" data-num="sv-u" data-fmt="usd" data-v="' + totU + '"></div>' +
+  var gh = S.goals.map(goalCard).join('') + '<button class="btn ghost" data-act="newgoal">' + (S.goals.length ? 'Ещё одна цель' : 'Поставить цель, например $100 000') + '</button>';
+  var h = gh + '<section class="hero"><div><div class="lbl">Доллары всего</div><div class="big" data-num="sv-u" data-fmt="usd" data-v="' + totU + '"></div>' +
     '<div class="hsub">' + (r && totU ? '≈ ' + money(Math.round(totU * r / 100), true) + ' по последнему курсу ' + sp(NF.format(r / 100)) + ' ₴' : (dD ? 'Наличными и на депозитах' : 'Наличные доллары')) + '</div></div>' +
     '<div class="row"><div><small>Наличные доллары</small><b data-num="sv-c" data-fmt="usd" data-v="' + u + '"></b></div><div><small>Депозиты в гривнах</small><b data-num="sv-d" data-round data-v="' + dU + '"></b></div></div></section>';
 
@@ -1911,6 +1977,52 @@ $('#ySave').addEventListener('click', function(){
   closeSheet();
 });
 
+/* ================= цели ================= */
+var GL = null;
+function openGoal(g){
+  GL = g ? {id:g.id, orig:g, cur:g.cur || 'USD'} : {id:null, orig:null, cur:'USD'};
+  $('#gTitle').textContent = g ? (g.name || 'Цель') : 'Новая цель';
+  $('#gName').value = g ? (g.name || '') : '';
+  $('#gTarget').value = g ? kopToInput(g.target) : '';
+  $('#gNow').value = g && g.now ? kopToInput(g.now) : '';
+  var d = $('#gDel'); d.hidden = !g; d.classList.remove('armed'); d.textContent = 'Удалить цель';
+  syncGoal(); openSheet('sGoal');
+}
+function syncGoal(){
+  setSeg($('#gCur'), GL.cur === 'UAH' ? 1 : 0); pressSet($('#gCur'), 'data-gc', GL.cur);
+  $('#gNowSuf').textContent = GL.cur === 'UAH' ? '₴' : '$';
+  var t = parseMoney($('#gTarget').value), n = $('#gNow').value.trim() ? parseMoney($('#gNow').value) : 0;
+  $('#gSum').innerHTML = t > 0 && !isNaN(n) ? 'Пройдено <b>' + Math.round(Math.min(100, n / t * 100)) + '%</b>, осталось собрать <b>' + inCur(Math.max(0, t - n), GL.cur, true) + '</b>.' : 'Впиши, сколько нужно собрать.';
+}
+$('#gCur').addEventListener('click', function(e){ var b = e.target.closest('[data-gc]'); if (b){ GL.cur = b.getAttribute('data-gc'); syncGoal(); } });
+['#gTarget','#gNow'].forEach(function(s){ $(s).addEventListener('input', syncGoal); });
+$('#gSave').addEventListener('click', function(){
+  var name = $('#gName').value.trim().slice(0, 30) || 'Цель', t = parseMoney($('#gTarget').value), nr = $('#gNow').value.trim(), n = nr ? parseMoney(nr) : 0;
+  if (!(t > 0)){ shake($('#gTarget').parentNode); toast('Впиши, сколько нужно собрать'); return; }
+  if (isNaN(n)){ shake($('#gNow').parentNode); toast('Сумму впиши цифрами'); return; }
+  var d = {name:name, target:t, cur:GL.cur, now:n}, hist = GL.orig ? (GL.orig.hist || []).slice() : [];
+  if (!GL.orig || GL.orig.now !== n){ hist = hist.filter(function(x){ return x.d !== today(); }); hist.push({d:today(), v:n}); }
+  d.hist = hist.slice(-200);
+  var p;
+  if (GL.id) p = store.patch('goals', GL.id, d);
+  else { d.ts = Date.now(); p = store.put('goals', uid(), d); }
+  p.catch(dbErr); toast(GL.id ? 'Цель сохранена' : 'Цель поставлена!'); closeSheet();
+});
+$('#gDel').addEventListener('click', function(){
+  if (!arm($('#gDel'), 'Нажми ещё раз, чтобы удалить цель')) return;
+  store.del('goals', GL.id).catch(dbErr); toast('Цель удалена'); closeSheet();
+});
+function goalNow(g){
+  var cur = g.cur || 'USD', i = goalInfo(g);
+  openNum({title:'Сколько сейчас: ' + (g.name || 'цель'), note:'Впиши, сколько всего уже собрано. Цель: ' + inCur(i.t, cur, true) + '.', ph:cur === 'USD' ? '35000' : '500000', suf:cur === 'USD' ? '$' : '₴', value:g.now ? kopToInput(g.now) : '',
+    save:function(v){
+      var hist = (g.hist || []).filter(function(x){ return x.d !== today(); }).concat([{d:today(), v:v}]).slice(-200);
+      store.patch('goals', g.id, {now:v, hist:hist}).catch(dbErr);
+      var p = i.t ? Math.round(Math.min(100, v / i.t * 100)) : 0;
+      toast(v >= i.t ? 'Цель достигнута! 🎉' : (v > (g.now || 0) ? '+' + inCur(v - (g.now || 0), cur, true) + ' · уже ' + p + '%' : 'Сохранено · ' + p + '%'), 3000);
+    }});
+}
+
 /* ================= участники ================= */
 var PE = null;
 function openPer(p){
@@ -2121,9 +2233,11 @@ $('#oSave').addEventListener('click', function(){
 
 /* ================= клики по экранам ================= */
 document.addEventListener('click', function(e){
-  var t = e.target.closest('[data-per],[data-tab],[data-ic],[data-tx],[data-go],[data-m],[data-sm],[data-sw],[data-hw],[data-ht],[data-cat],[data-act],[data-plan],[data-pay],[data-th],[data-wup],[data-wdn],[data-wsw],[data-usd],[data-usdop],[data-dep]');
+  var t = e.target.closest('[data-goal],[data-goalnow],[data-per],[data-tab],[data-ic],[data-tx],[data-go],[data-m],[data-sm],[data-sw],[data-hw],[data-ht],[data-cat],[data-act],[data-plan],[data-pay],[data-th],[data-wup],[data-wdn],[data-wsw],[data-usd],[data-usdop],[data-dep]');
   if (!t || t.closest('.sheet')) return;
   if (t.hasAttribute('data-tab')) return go(t.getAttribute('data-tab'));
+  if (t.hasAttribute('data-goal')){ var gg = byId(S.goals, t.getAttribute('data-goal')); if (gg) openGoal(gg); return; }
+  if (t.hasAttribute('data-goalnow')){ var gn = byId(S.goals, t.getAttribute('data-goalnow')); if (gn) goalNow(gn); return; }
   if (t.hasAttribute('data-per')){ var pr = per(t.getAttribute('data-per')); if (pr) openPer(pr); return; }
   if (t.hasAttribute('data-usd')){ var uu = byId(S.usd, t.getAttribute('data-usd')); if (uu) openUsd(uu); return; }
   if (t.hasAttribute('data-usdop')){ var uo = byId(S.usd, t.getAttribute('data-usdop')); if (uo) openUsdOp(uo); return; }
@@ -2162,6 +2276,7 @@ document.addEventListener('click', function(e){
   if (a === 'newplan') return openPlan(null);
   if (a === 'newinc') return openPlan(null, true);
   if (a === 'newper') return openPer(null);
+  if (a === 'newgoal') return openGoal(null);
   if (a === 'newdep') return openDep(null);
   if (a === 'newusd') return openUsd(null);
   if (a === 'limits'){ go('settings'); setTimeout(function(){ var el = document.getElementById('catsCard'); if (el) el.scrollIntoView({behavior:'smooth', block:'start'}); }, 80); toast('Нажми на категорию, чтобы поставить лимит', 3000); return; }
@@ -2195,6 +2310,7 @@ function onData(c, list){
   }
   else if (c === 'deps') S.deps = list.filter(function(d){ return d && typeof d.amount === 'number' && /^\d{4}-\d{2}-\d{2}$/.test(d.start || '') && /^\d{4}-\d{2}-\d{2}$/.test(d.end || ''); }).sort(function(a, b){ return (a.ts || 0) - (b.ts || 0); });
   else if (c === 'plans') S.plans = list.filter(function(p){ return p && typeof p.amount === 'number' && /^\d{4}-\d{2}$/.test(p.start || ''); });
+  else if (c === 'goals') S.goals = list.filter(function(g){ return g && typeof g.target === 'number'; }).sort(function(a, b){ return (a.ts || 0) - (b.ts || 0); });
   else if (c === 'people') S.people = list.filter(function(p){ return p && p.name; }).sort(function(a, b){ return (a.order || 0) - (b.order || 0) || String(a.name).localeCompare(String(b.name)); });
   else if (c === 'usd') S.usd = list.filter(function(k){ return k && typeof k === 'object'; }).sort(function(a, b){ return (a.ts || 0) - (b.ts || 0); });
   queueRender();
