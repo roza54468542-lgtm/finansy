@@ -996,16 +996,28 @@ function FirebaseStore(db){
   }
   return {
     listen: function(cb){
-      var un = [];
+      var un = [], dead = false;
+      // слушатель базы после ошибки (нет сети, нет доступа) Firebase отключает навсегда — подключаемся заново сами
+      function keep(ref, onData){
+        var i = un.length, tries = 0;
+        function sub(){
+          un[i] = ref.onSnapshot(function(x){ tries = 0; onData(x); }, function(e){
+            if (tries === 0) dbErr(e);
+            if (dead) return;
+            tries++; setTimeout(function(){ if (!dead) sub(); }, Math.min(60000, 3000 * tries));
+          });
+        }
+        sub();
+      }
       COLS.forEach(function(c){
-        un.push(db.collection(c).onSnapshot(function(s){ cb(c, s.docs.map(function(d){ var o = d.data(); o.id = d.id; return o; })); }, dbErr));
+        keep(db.collection(c), function(s){ cb(c, s.docs.map(function(d){ var o = d.data(); o.id = d.id; return o; })); });
       });
-      un.push(setD.onSnapshot(function(d){
+      keep(setD, function(d){
         var o = d.exists ? d.data() : {};
         cb('settings', o);
         if (!d.metadata.fromCache && !o.seeded) seed().catch(dbErr);
-      }, dbErr));
-      return function(){ un.forEach(function(f){ f(); }); };
+      });
+      return function(){ dead = true; un.forEach(function(f){ f(); }); };
     },
     put: function(c, id, o){ return db.collection(c).doc(id).set(clean(o)); },
     patch: function(c, id, p){ return db.collection(c).doc(id).update(clean(p)); },
